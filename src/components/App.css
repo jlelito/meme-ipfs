@@ -1,0 +1,22 @@
+/* Styles go here */
+body{
+
+	background-color: lightblue;
+
+}
+
+nav.navbar{
+
+	border-style: solid;
+	border-width: 5px;
+}
+
+select.cars{
+
+position: relative;
+  top: 40px;
+  width: 200px;
+  height: 50px;
+
+
+}
