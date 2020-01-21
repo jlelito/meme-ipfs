@@ -1,87 +1,86 @@
-import React, { Component } from 'react';
+import React, { useEffect, useState } from 'react';
 import './App.css';
-import Web3 from 'web3';
+import { getWeb3 } from './../utils.js';
 import Meme from '../abis/Meme.json'
 
-//Progress on Video
-// Last stopped: 1:25:17, Part 4
+function App() {
 
-const ipfsClient = require('ipfs-http-client')
-const ipfs = ipfsClient({host: 'ipfs.infura.io', port: 5001,  protocol: 'https' })
+  const [web3, setWeb3] = useState(undefined);
+  const [accounts, setAccounts] = useState(undefined);
+  const [contract, setContract] = useState(undefined);
+  const [meme, setMeme] = useState(undefined);
+  const [buff, setBuffer] = useState(undefined);
+  
 
-class App extends Component {
-
-  async componentWillMount(){
-    await this.loadWeb3()
-    await this.loadBlockchainData()
-  }
-
-
-  // Get the account
-  // Get the network
-  // Get the Smart Contract
-  //---> ABI: Meme.abi
-  //---> Address: networkData.address
-  // Get the Meme Hash
-
-  async loadBlockchainData(){
-
-    const web3 = window.web3
-    const accounts = await web3.eth.getAccounts()
-    this.setState({account: accounts[0]})
-    const networkId = await web3.eth.net.getId()
-    const networkData = Meme.networks[networkId]
-    if(networkData){
-      const abi = Meme.abi
-      const address = networkData.address
-      const contract = web3.eth.Contract(abi, address)
-      this.setState({ contract })
-      const memeHash = await contract.methods.get().call()
-      this.setState({memeHash})
+  useEffect(() => {
+    const init = async () => {
+      console.log("STARTING INIT!");
+      const web3 = await getWeb3();
+      console.log(web3);
+      const accounts = await web3.eth.getAccounts();
+      console.log(accounts[0]);
+      const networkId = await web3.eth.net.getId();
+      console.log(networkId);
+      const deployedNetwork = Meme.networks[networkId];
+      const contract = new web3.eth.Contract(
+        Meme.abi,
+        deployedNetwork && deployedNetwork.address,
+      );
+      const meme = await contract.methods.get().call();
+      
+      
+      setWeb3(web3);
+      setAccounts(accounts);
+      setContract(contract);
+      setMeme(meme);
+      
+      console.log("DONE INIT");
+     
+      
     }
-
-    else{
-      window.alert('Smart contract not deployed to specified network')
+    init();
+    if(meme === undefined){
+      console.log("SETTING MEME");
+      setMeme("QmQPjsXPQjJ54mfMB7V6zBnX8hxSWsQXeu7gtFyZp3oUUb");
+      console.log(meme);
     }
+    window.ethereum.on('accountsChanged', accounts => {
+      setAccounts(accounts);
+      window.location.reload();
+    });
+  }, [web3]);
 
-  }
-  constructor(props) {
-    super(props);
+  const ipfsClient = require('ipfs-http-client');
+  const ipfs = ipfsClient({host: 'ipfs.infura.io', port: 5001,  protocol: 'https' });
 
-    this.state = {
-      account: '',
-      buffer: null,
-      contract: null,
-      memeHash: ''
-    };
-  }
-
-// Detect if the user is using Metamask or not
-  async loadWeb3() {
-    if(window.ethereum){
-      window.web3 = new Web3(window.ethereum)
-      await window.ethereum.enable()
-    } if(window.web3) {
-      window.web3 = new Web3(window.web3.currentProvider)
-
-    } else{
-      window.alert('Please use Metamask!')
-    }
-
+  const isReady = () => {
+    return (
+      typeof contract !== 'undefined' 
+      && typeof web3 !== 'undefined'
+      && typeof accounts !== 'undefined'
+    );
   }
 
 
+  useEffect(() => {
+    if(isReady()) {
+      console.log(accounts[0]);
+      
+    } 
+  
+  }, [accounts, contract, web3]);
 
 
-  captureFile = (event) => {
-    event.preventDefault()
+
+  function captureFile  (event) {
+    event.preventDefault();
 
     // Process file for IPFS
-    const file = event.target.files[0]
-    const reader = new window.FileReader()
-    reader.readAsArrayBuffer(file)
+    const file = event.target.files[0];
+    const reader = new window.FileReader();
+    reader.readAsArrayBuffer(file);
     reader.onloadend = () => {
-      this.setState({buffer : Buffer(reader.result)})
+      setBuffer({buff : Buffer(reader.result)});
 
     }
 }
@@ -90,28 +89,37 @@ class App extends Component {
   //Example hash: QmQPjsXPQjJ54mfMB7V6zBnX8hxSWsQXeu7gtFyZp3oUUb
   //Example url: https://ipfs.infura.io/ipfs/QmQPjsXPQjJ54mfMB7V6zBnX8hxSWsQXeu7gtFyZp3oUUb
 
-  onSubmit = (event) => {
-  event.preventDefault()
-  console.log("Submitting the form")
-  ipfs.add(this.state.buffer, (error, result) => {
-    console.log('ipfs result', result)
-    const memeHash = result[0].hash
-    this.setState({ memeHash })
+  async function onSubmit(event) {
+
+  event.preventDefault();
+  console.log("Submitting the form");
+  ipfs.add(buff, (error, result) => {
+    console.log('ipfs result', result);
+    const memeHash = result[0].hash;
+    setMeme({ memeHash });
 
     if(error){
-      console.error(error)
+      console.error(error);
       return
     }
 
     //Step 2: store file on blockchain...
-    this.state.contract.methods.set(memeHash).send({ from: this.state.account }).then((r) => {
-      this.setState({memeHash})
+      contract.methods.set(memeHash).send({ from: accounts[0] }).then((r) => {
+      setMeme({memeHash});
     })
 
   })
 }
 
-  render() {
+
+if (!isReady()) {
+  console.log("Not ready");
+  return <div>Loading...</div>;
+}
+
+
+
+  
     return (
       <div>
         <nav className="navbar navbar-dark fixed-top bg-dark flex-md-nowrap p-0 shadow">
@@ -120,7 +128,7 @@ class App extends Component {
           
           <ul className="navbar-nav px-3">
             <li className="nav-item text-nowrap d-none d-sm-none d-sm-block">
-              <small className="text-white"> {this.state.account} </small>
+              <small className="text-white"> {accounts[0]} </small>
             </li>
           </ul>
         </nav>
@@ -129,20 +137,14 @@ class App extends Component {
             <main role="main" className="col-lg-12 d-flex text-center">
               <div className="content mr-auto ml-auto">
                 <a href="https://www.youtube.com/watch?v=oHg5SJYRHA0" target="_blank">
-                  <img src={`https://ipfs.infura.io/ipfs/${this.state.memeHash}`} width="700" height="500"/>
+                  <img src={`https://ipfs.infura.io/ipfs/${meme}`} width="700" height="500"/>
                 </a>
                 <p>&nbsp;</p>
                 <h2> Change Meme </h2>
-                <form onSubmit = {this.onSubmit}>
-                  <input type='file' onChange={this.captureFile} />
+                <form onSubmit = {e => onSubmit(e)}>
+                  <input type='file' onChange={e => captureFile(e)} />
                   <input type='submit' />
                 </form>
-                  <select name="cars" className='cars'>
-                    <option value="volvo">Volvo</option>
-                    <option value="saab">Saab</option>
-                    <option value="fiat">Fiat</option>
-                    <option value="audi">Audi</option>
-                  </select>
 
               </div>
             </main>
@@ -151,6 +153,6 @@ class App extends Component {
       </div>
     );
   }
-}
+
 
 export default App;
